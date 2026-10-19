@@ -22,6 +22,7 @@ const ALLERGENS = ["えび", "かに", "くるみ", "小麦", "そば", "卵", "
 // price：食べ放題（鶏肉・デザート）は 0 円、ドリンクは単品価格
 const MENU = [
   // 鶏肉食べ放題（塩のみ）
+  { id: "M33", name: "焼き鳥", category: "chicken", price: 0, allergens: [] },
   { id: "M01", name: "鶏もも", category: "chicken", price: 0, allergens: [] },
   { id: "M02", name: "せせり", category: "chicken", price: 0, allergens: [] },
   { id: "M03", name: "砂ずり", category: "chicken", price: 0, allergens: [] },
@@ -54,10 +55,10 @@ const MENU = [
   { id: "M27", name: "アイスクリーム", category: "dessert", price: 0, allergens: ["乳", "卵"] },
 ];
 
-// おすすめ料理（年代ごとに 2 品）
+// おすすめ料理（年代ごとに 2 品。先に書いた品から順に表示する）
 const RECOMMEND_FOOD = {
-  "10代": ["M08", "M27"],
-  "20代": ["M01", "M06"],
+  "10代": ["M33", "M27"],
+  "20代": ["M33", "M01"],
   "30代": ["M02", "M05"],
   "40代": ["M03", "M07"],
   "50代": ["M04", "M26"],
