@@ -1,15 +1,21 @@
-// ジルアーナマチャラ亭 メニュー・オーダーシステム
+// ジルアーナ＝マチャラ亭 メニュー・オーダーシステム
 
 // ===== 定数 =====
 const STORAGE_CURRENT = "jiru_current_order"; // 会計前の注文
 const STORAGE_ORDERS = "jiru_orders"; // 会計確定済みの注文の一覧
+const DATA_VERSION = 2; // 会計前の注文データの形のバージョン
+const LAST_ORDER_MINUTES = 90; // 受付からラストオーダーまでの分数（動作確認のときは 1 などに変えて試せる）
 const DRINK_CATEGORIES = ["soft", "alcohol"];
 const ADULT_AGE = 20;
+const PLAN_DRINKBAR = "ドリンクバー";
+const PLAN_TANPIN = "単品";
 
 // ===== 状態 =====
 let state = null; // 会計前の注文（受付〜会計確定まで）
 let currentCategory = CATEGORIES[0].id;
 let messageTimer = null;
+let clockTimer = null;
+let lastOrderPassedShown = null; // 画面に反映済みのラストオーダー状態
 
 // ===== 便利な関数 =====
 function $(id) {
@@ -53,8 +59,18 @@ function hasSelectedAllergy(menu) {
   return menu.allergens.some((a) => state.allergies.includes(a));
 }
 
-function guestLabel(customer, index) {
-  return `${index + 1}人目（${customer.age}歳・${customer.gender}）`;
+function drinkbarCount() {
+  return state.customers.filter((c) => c.drinkbar).length;
+}
+
+// ドリンクバーで注文できるのは、ドリンクバーを付けた人が 1 人以上いるとき
+function canOrderDrinkbar() {
+  return drinkbarCount() > 0;
+}
+
+// 単品で注文できるのは、ドリンクバーを付けていない人が 1 人以上いるとき
+function canOrderTanpin() {
+  return drinkbarCount() < state.customers.length;
 }
 
 // ===== localStorage =====
@@ -137,7 +153,6 @@ function initReception() {
   ).join("");
 
   $("people-count").addEventListener("input", onPeopleCountInput);
-  $("guest-rows").addEventListener("input", onGuestRowInput);
   $("start-btn").addEventListener("click", startOrder);
 }
 
@@ -167,7 +182,7 @@ function renderGuestRows(count) {
   const old = Array.from(box.querySelectorAll(".guest-row")).map((row) => ({
     age: row.querySelector(".guest-age").value,
     gender: row.querySelector(".guest-gender").value,
-    drink: row.querySelector(".guest-drink").checked,
+    drinkbar: row.querySelector(".guest-drinkbar").checked,
   }));
 
   let html = "";
@@ -188,7 +203,7 @@ function renderGuestRows(count) {
           </select>
         </label>
         <label class="guest-field check">
-          <input class="guest-drink" type="checkbox"> 飲み放題
+          <input class="guest-drinkbar" type="checkbox"> ドリンクバー
           <span class="plan-note">+1,000円</span>
         </label>
       </div>`;
@@ -199,28 +214,8 @@ function renderGuestRows(count) {
     if (!old[i]) return;
     row.querySelector(".guest-age").value = old[i].age;
     row.querySelector(".guest-gender").value = old[i].gender;
-    row.querySelector(".guest-drink").checked = old[i].drink;
-    updatePlanNote(row);
+    row.querySelector(".guest-drinkbar").checked = old[i].drinkbar;
   });
-}
-
-function onGuestRowInput(e) {
-  if (e.target.classList.contains("guest-age")) {
-    updatePlanNote(e.target.closest(".guest-row"));
-  }
-}
-
-// 年齢に応じて、飲み放題の種類を表示する
-function updatePlanNote(row) {
-  const result = checkInteger(row.querySelector(".guest-age").value, "年齢", 0, 120);
-  const note = row.querySelector(".plan-note");
-  if (!result.ok) {
-    note.textContent = "+1,000円";
-  } else if (isAdult(result.value)) {
-    note.textContent = "アルコール含む +1,000円";
-  } else {
-    note.textContent = "ソフトドリンクのみ +1,000円";
-  }
 }
 
 function startOrder() {
@@ -234,7 +229,6 @@ function startOrder() {
     rows.forEach((row, i) => {
       const ageResult = checkInteger(row.querySelector(".guest-age").value, `${i + 1}人目の年齢`, 0, 120);
       const gender = row.querySelector(".guest-gender").value;
-      const nomihodai = row.querySelector(".guest-drink").checked;
       if (!ageResult.ok) errors.push(ageResult.message);
       if (!gender) errors.push(`${i + 1}人目の性別を選んでください`);
       if (ageResult.ok && gender) {
@@ -243,9 +237,7 @@ function startOrder() {
           age: ageResult.value,
           ageGroup: ageGroupOf(ageResult.value),
           gender: gender,
-          nomihodai: nomihodai,
-          // 20歳未満はソフトドリンクのみの飲み放題
-          nomihodaiType: nomihodai ? (isAdult(ageResult.value) ? "通常" : "ソフトドリンクのみ") : null,
+          drinkbar: row.querySelector(".guest-drinkbar").checked,
         });
       }
     });
@@ -260,19 +252,76 @@ function startOrder() {
   errorList.hidden = true;
 
   const allergies = Array.from($("allergy-list").querySelectorAll("input:checked")).map((cb) => cb.value);
+  const now = new Date();
   state = {
-    orderId: "O" + Date.now(),
-    orderedAt: new Date().toISOString(),
+    version: DATA_VERSION,
+    orderId: "O" + now.getTime(),
+    orderedAt: now.toISOString(),
+    startedAt: now.getTime(), // ラストオーダーの計算に使う
     peopleCount: countResult.value,
     customers: customers,
     allergies: allergies,
-    lines: [],
+    cart: [], // まだ注文確定していない品
+    lines: [], // 注文確定した品
     staffCalls: [],
     nextLineNo: 1,
     status: "注文中",
   };
   saveCurrent();
   enterOrderScreen();
+}
+
+// ===== ラストオーダー =====
+function remainingMs() {
+  return state.startedAt + LAST_ORDER_MINUTES * 60 * 1000 - Date.now();
+}
+
+function isLastOrderPassed() {
+  return remainingMs() <= 0;
+}
+
+function startClock() {
+  stopClock();
+  lastOrderPassedShown = null;
+  updateClock();
+  clockTimer = setInterval(updateClock, 1000);
+}
+
+function stopClock() {
+  clearInterval(clockTimer);
+  clockTimer = null;
+}
+
+// 残り時間を表示し、ラストオーダーを過ぎたら注文ボタンを止める
+function updateClock() {
+  if (!state) {
+    stopClock();
+    return;
+  }
+  const passed = isLastOrderPassed();
+  const box = $("last-order");
+  if (passed) {
+    box.textContent = "ラストオーダーの時間を過ぎました。追加のご注文はお受けできません。";
+  } else {
+    const sec = Math.ceil(remainingMs() / 1000);
+    const m = Math.floor(sec / 60);
+    const s = String(sec % 60).padStart(2, "0");
+    box.textContent = `ラストオーダーまで 残り ${m}分${s}秒`;
+  }
+  box.classList.toggle("is-over", passed);
+
+  if (passed !== lastOrderPassedShown) {
+    lastOrderPassedShown = passed;
+    renderMenu();
+    renderCart();
+  }
+}
+
+// ラストオーダーを過ぎていたらお知らせして true を返す
+function blockIfLastOrderPassed() {
+  if (!isLastOrderPassed()) return false;
+  showMessage("ラストオーダーの時間を過ぎたため、注文できません", true);
+  return true;
 }
 
 // ===== ② 注文画面 =====
@@ -285,6 +334,9 @@ function initOrderScreen() {
     renderMenu();
   });
   $("menu-list").addEventListener("click", onMenuClick);
+  $("cart-list").addEventListener("click", onCartClick);
+  $("cart-list").addEventListener("change", onCartChange);
+  $("submit-order-btn").addEventListener("click", submitOrder);
   $("order-list").addEventListener("click", onOrderListClick);
   $("order-list").addEventListener("change", onOrderListChange);
   $("recommend-person").addEventListener("change", renderRecommend);
@@ -294,7 +346,6 @@ function initOrderScreen() {
 
 // 店員呼び出し（画面に表示し、呼び出した日時を記録する）
 function callStaff() {
-  if (!Array.isArray(state.staffCalls)) state.staffCalls = [];
   state.staffCalls.push({ calledAt: new Date().toISOString() });
   saveCurrent();
   showMessage("店員を呼び出しました。少々お待ちください。", false);
@@ -302,21 +353,22 @@ function callStaff() {
 
 function enterOrderScreen() {
   currentCategory = CATEGORIES[0].id;
-  const nomihodaiCount = state.customers.filter((c) => c.nomihodai).length;
   const allergyText = state.allergies.length > 0 ? state.allergies.join("・") : "なし";
   $("order-info").textContent =
-    `${state.peopleCount}名様 ／ 飲み放題 ${nomihodaiCount}名 ／ アレルギー指定：${allergyText}`;
+    `${state.peopleCount}名様 ／ ドリンクバー ${drinkbarCount()}名 ／ アレルギー指定：${allergyText}`;
 
   $("recommend-person").innerHTML = state.customers
-    .map((c, i) => `<option value="${c.customerId}">${guestLabel(c, i)}</option>`)
+    .map((c, i) => `<option value="${c.customerId}">${i + 1}人目（${c.age}歳・${c.gender}）</option>`)
     .join("");
 
   renderTabs();
   renderMenu();
+  renderCart();
+  renderOrderList();
   renderRecommend();
   renderRanking();
-  renderOrderList();
   showScreen("order");
+  startClock();
 }
 
 function renderTabs() {
@@ -328,27 +380,32 @@ function renderTabs() {
 }
 
 function priceLabel(menu) {
-  if (menu.category === "chicken") return "食べ放題（0円）";
-  if (isDrink(menu)) return `単品 ${yen(menu.price)}／飲み放題 0円`;
-  return yen(menu.price);
+  if (isDrink(menu)) return `単品 ${yen(menu.price)}`;
+  return "食べ放題（0円）";
 }
 
 function allergyLabel(menu) {
   return "アレルギー：" + (menu.allergens.length > 0 ? menu.allergens.join("・") : "なし");
 }
 
-// 「誰の分か」の選択肢（20歳未満はアルコールを選べない）
-function whoOptions(menu) {
-  const options = state.customers.map((c, i) => {
-    const plan = c.nomihodai ? "飲み放題" : "単品";
-    const blocked = menu.category === "alcohol" && !isAdult(c.age);
-    const note = blocked ? "・20歳未満" : "";
-    return `<option value="${c.customerId}"${blocked ? " disabled" : ""}>${i + 1}人目（${c.age}歳・${plan}${note}）</option>`;
-  });
-  return '<option value="">誰の分？</option>' + options.join("");
+// カートに入れるボタン（ドリンクはドリンクバー／単品のボタン）
+function addButtons(menu) {
+  const disabled = isLastOrderPassed() ? " disabled" : "";
+  if (!isDrink(menu)) {
+    return `<button type="button" class="btn btn-main add-btn" data-act="add"${disabled}>カートに入れる</button>`;
+  }
+  let html = "";
+  if (canOrderDrinkbar()) {
+    html += `<button type="button" class="btn btn-main add-btn" data-act="add" data-plan="${PLAN_DRINKBAR}"${disabled}>ドリンクバーで（0円）</button>`;
+  }
+  if (canOrderTanpin()) {
+    html += `<button type="button" class="btn btn-sub add-btn" data-act="add" data-plan="${PLAN_TANPIN}"${disabled}>単品で（${yen(menu.price)}）</button>`;
+  }
+  return html;
 }
 
 function renderMenu() {
+  if (!state) return;
   const items = MENU.filter((m) => m.category === currentCategory && !hasSelectedAllergy(m));
   if (items.length === 0) {
     $("menu-list").innerHTML = '<p class="note">アレルギーの指定により、表示できるメニューがありません。</p>';
@@ -361,13 +418,12 @@ function renderMenu() {
         <p class="menu-name">${m.name}</p>
         <p class="menu-price">${priceLabel(m)}</p>
         <p class="menu-allergy">${allergyLabel(m)}</p>
-        ${isDrink(m) ? `<select class="who-select" aria-label="誰の分か">${whoOptions(m)}</select>` : ""}
         <div class="qty">
           <button type="button" class="qty-btn" data-act="minus" aria-label="1つ減らす">−</button>
           <input class="qty-input" type="text" inputmode="numeric" value="1" aria-label="数量">
           <button type="button" class="qty-btn" data-act="plus" aria-label="1つ増やす">＋</button>
         </div>
-        <button type="button" class="btn btn-main order-btn" data-act="order">注文する</button>
+        <div class="add-buttons">${addButtons(m)}</div>
       </div>`
     )
     .join("");
@@ -387,13 +443,13 @@ function onMenuClick(e) {
     return;
   }
 
-  const who = card.querySelector(".who-select");
-  const ok = placeOrder(card.dataset.id, input.value, who ? who.value : null);
+  const ok = addToCart(card.dataset.id, input.value, button.dataset.plan || null);
   if (ok) input.value = 1;
 }
 
-// 注文する。成功したら true を返す
-function placeOrder(menuId, qtyRaw, customerId) {
+// カートに入れる。成功したら true を返す
+function addToCart(menuId, qtyRaw, plan) {
+  if (blockIfLastOrderPassed()) return false;
   const menu = findMenu(menuId);
   if (!menu) return false;
   if (hasSelectedAllergy(menu)) {
@@ -407,27 +463,22 @@ function placeOrder(menuId, qtyRaw, customerId) {
     return false;
   }
 
-  let plan = null;
   if (isDrink(menu)) {
-    const customer = customerId ? findCustomer(customerId) : null;
-    if (!customer) {
-      showMessage("ドリンクは「誰の分か」を選んでください", true);
+    if (plan === PLAN_DRINKBAR && !canOrderDrinkbar()) {
+      showMessage("ドリンクバーを付けた方がいないため、ドリンクバーでは注文できません", true);
       return false;
     }
-    if (menu.category === "alcohol" && !isAdult(customer.age)) {
-      showMessage("20歳未満の方はアルコールを注文できません", true);
+    if (plan === PLAN_TANPIN && !canOrderTanpin()) {
+      showMessage("全員がドリンクバーのため、ドリンクバーで注文してください", true);
       return false;
     }
-    plan = customer.nomihodai ? "飲み放題" : "単品";
+    if (plan !== PLAN_DRINKBAR && plan !== PLAN_TANPIN) return false;
   } else {
-    customerId = null;
+    plan = null;
   }
-  const unitPrice = plan === "飲み放題" ? 0 : menu.price;
 
-  // 同じ品（ドリンクは同じ人・同じ扱い）の注文はまとめる
-  const same = state.lines.find(
-    (l) => l.menuId === menuId && l.customerId === customerId && l.plan === plan
-  );
+  // 同じ品（ドリンクは同じ注文方法）はまとめる
+  const same = state.cart.find((c) => c.menuId === menuId && c.plan === plan);
   if (same) {
     if (same.quantity + qty.value > 99) {
       showMessage("1品の数量は99個までです", true);
@@ -435,24 +486,198 @@ function placeOrder(menuId, qtyRaw, customerId) {
     }
     same.quantity += qty.value;
   } else {
-    state.lines.push({
-      lineId: "L" + state.nextLineNo++,
-      menuId: menu.id,
-      menuName: menu.name,
-      category: menu.category,
-      quantity: qty.value,
-      unitPrice: unitPrice,
-      customerId: customerId,
-      plan: plan,
-    });
+    state.cart.push({ menuId: menuId, plan: plan, quantity: qty.value });
   }
 
   saveCurrent();
-  renderOrderList();
-  showMessage(`${menu.name} ×${qty.value} を注文しました`, false);
+  renderCart();
+  showMessage(`${menu.name} ×${qty.value} をカートに入れました`, false);
   return true;
 }
 
+function unitPriceOf(menu, plan) {
+  return plan === PLAN_DRINKBAR ? 0 : menu.price;
+}
+
+function planTag(plan) {
+  if (!plan) return "";
+  return `<span class="line-tag${plan === PLAN_DRINKBAR ? " is-free" : ""}">${plan}</span>`;
+}
+
+// ===== カート =====
+function renderCart() {
+  if (!state) return;
+  if (state.cart.length === 0) {
+    $("cart-list").innerHTML = '<li class="note">カートは空です</li>';
+  } else {
+    $("cart-list").innerHTML = state.cart
+      .map((c, i) => {
+        const menu = findMenu(c.menuId);
+        return `
+        <li class="order-line" data-index="${i}">
+          <div class="line-head">
+            <span class="line-name">${menu.name}</span>
+            ${planTag(c.plan)}
+          </div>
+          <div class="line-body">
+            <div class="qty qty-small">
+              <button type="button" class="qty-btn" data-act="minus" aria-label="1つ減らす">−</button>
+              <input class="qty-input" type="text" inputmode="numeric" value="${c.quantity}" aria-label="数量">
+              <button type="button" class="qty-btn" data-act="plus" aria-label="1つ増やす">＋</button>
+            </div>
+            <span class="line-price">${yen(unitPriceOf(menu, c.plan) * c.quantity)}</span>
+          </div>
+        </li>`;
+      })
+      .join("");
+  }
+  $("submit-order-btn").disabled = state.cart.length === 0 || isLastOrderPassed();
+
+  const count = state.cart.reduce((sum, c) => sum + c.quantity, 0);
+  $("cart-bar-count").textContent = `カート ${count}点`;
+}
+
+function cartItemOf(target) {
+  const li = target.closest(".order-line");
+  return li ? state.cart[Number(li.dataset.index)] : null;
+}
+
+function onCartClick(e) {
+  const button = e.target.closest("[data-act]");
+  if (!button) return;
+  const item = cartItemOf(button);
+  if (!item) return;
+  setCartQuantity(item, item.quantity + (button.dataset.act === "plus" ? 1 : -1));
+}
+
+function onCartChange(e) {
+  if (!e.target.classList.contains("qty-input")) return;
+  const item = cartItemOf(e.target);
+  if (item) setCartQuantity(item, e.target.value);
+}
+
+// カートの数量を変える（0 でカートから外す）
+function setCartQuantity(item, raw) {
+  const result = checkInteger(raw, "数量", 0, 99);
+  if (!result.ok) {
+    showMessage(result.message, true);
+  } else if (result.value === 0) {
+    state.cart = state.cart.filter((c) => c !== item);
+  } else {
+    item.quantity = result.value;
+  }
+  saveCurrent();
+  renderCart();
+}
+
+// カートの中身を注文確定する
+function submitOrder() {
+  if (blockIfLastOrderPassed()) return;
+  if (state.cart.length === 0) {
+    showMessage("カートが空です", true);
+    return;
+  }
+
+  const findLine = (c) => state.lines.find((l) => l.menuId === c.menuId && l.plan === c.plan);
+  const over = state.cart.find((c) => {
+    const line = findLine(c);
+    return line && line.quantity + c.quantity > 99;
+  });
+  if (over) {
+    showMessage(`${findMenu(over.menuId).name} は1品99個までです（注文済みと合わせて）`, true);
+    return;
+  }
+
+  let count = 0;
+  state.cart.forEach((c) => {
+    const menu = findMenu(c.menuId);
+    const line = findLine(c);
+    count += c.quantity;
+    if (line) {
+      line.quantity += c.quantity;
+    } else {
+      state.lines.push({
+        lineId: "L" + state.nextLineNo++,
+        menuId: menu.id,
+        menuName: menu.name,
+        category: menu.category,
+        quantity: c.quantity,
+        unitPrice: unitPriceOf(menu, c.plan),
+        plan: c.plan,
+      });
+    }
+  });
+  state.cart = [];
+
+  saveCurrent();
+  renderCart();
+  renderOrderList();
+  showMessage(`ご注文を承りました（${count}点）`, false);
+}
+
+// ===== 注文済み =====
+function renderOrderList() {
+  if (state.lines.length === 0) {
+    $("order-list").innerHTML = '<li class="note">まだ注文はありません</li>';
+  } else {
+    $("order-list").innerHTML = state.lines
+      .map(
+        (l) => `
+        <li class="order-line" data-line="${l.lineId}">
+          <div class="line-head">
+            <span class="line-name">${l.menuName}</span>
+            ${planTag(l.plan)}
+          </div>
+          <div class="line-body">
+            <div class="qty qty-small">
+              <button type="button" class="qty-btn" data-act="minus" aria-label="1つ減らす">−</button>
+              <input class="qty-input" type="text" inputmode="numeric" value="${l.quantity}" aria-label="数量">
+            </div>
+            <span class="line-price">${yen(l.unitPrice * l.quantity)}</span>
+          </div>
+        </li>`
+      )
+      .join("");
+  }
+  $("order-total").textContent = "現在のお会計（目安）：" + yen(calcBill().total);
+}
+
+function orderLineOf(target) {
+  const li = target.closest(".order-line");
+  return li ? state.lines.find((l) => l.lineId === li.dataset.line) : null;
+}
+
+function onOrderListClick(e) {
+  const button = e.target.closest("[data-act]");
+  if (!button) return;
+  const line = orderLineOf(button);
+  if (line) setLineQuantity(line, line.quantity - 1);
+}
+
+function onOrderListChange(e) {
+  if (!e.target.classList.contains("qty-input")) return;
+  const line = orderLineOf(e.target);
+  if (line) setLineQuantity(line, e.target.value);
+}
+
+// 注文済みの数量を減らす（0 で取り消し）。増やすのはメニューから
+function setLineQuantity(line, raw) {
+  const result = checkInteger(raw, "数量", 0, 99);
+  if (!result.ok) {
+    showMessage(result.message, true);
+  } else if (result.value > line.quantity) {
+    showMessage("注文済みの数量は減らすことだけできます。追加はメニューから注文してください", true);
+  } else if (result.value === 0) {
+    state.lines = state.lines.filter((l) => l !== line);
+    showMessage(`${line.menuName} を取り消しました`, false);
+  } else {
+    line.quantity = result.value;
+  }
+  saveCurrent();
+  renderOrderList();
+}
+
+// ===== おすすめ・ランキング =====
 function renderRecommend() {
   const customer = findCustomer($("recommend-person").value) || state.customers[0];
   const drinkId = RECOMMEND_DRINK[customer.gender][isAdult(customer.age) ? "adult" : "minor"];
@@ -505,103 +730,28 @@ function renderRanking() {
     .join("");
 }
 
-function lineLabel(line) {
-  if (!line.customerId) return "";
-  const index = state.customers.findIndex((c) => c.customerId === line.customerId);
-  return `<span class="line-tag${line.plan === "飲み放題" ? " is-free" : ""}">${index + 1}人目・${line.plan}</span>`;
-}
-
-function renderOrderList() {
-  if (state.lines.length === 0) {
-    $("order-list").innerHTML = '<li class="note">まだ注文はありません</li>';
-  } else {
-    $("order-list").innerHTML = state.lines
-      .map(
-        (l) => `
-        <li class="order-line" data-line="${l.lineId}">
-          <div class="line-head">
-            <span class="line-name">${l.menuName}</span>
-            ${lineLabel(l)}
-          </div>
-          <div class="line-body">
-            <div class="qty qty-small">
-              <button type="button" class="qty-btn" data-act="minus" aria-label="1つ減らす">−</button>
-              <input class="qty-input" type="text" inputmode="numeric" value="${l.quantity}" aria-label="数量">
-              <button type="button" class="qty-btn" data-act="plus" aria-label="1つ増やす">＋</button>
-            </div>
-            <span class="line-price">${yen(l.unitPrice * l.quantity)}</span>
-          </div>
-        </li>`
-      )
-      .join("");
-  }
-  $("order-total").textContent = "現在のお会計（目安）：" + yen(calcBill().total);
-}
-
-function onOrderListClick(e) {
-  const button = e.target.closest("[data-act]");
-  if (!button) return;
-  const line = state.lines.find((l) => l.lineId === button.closest(".order-line").dataset.line);
-  if (!line) return;
-  setLineQuantity(line, line.quantity + (button.dataset.act === "plus" ? 1 : -1));
-}
-
-function onOrderListChange(e) {
-  if (!e.target.classList.contains("qty-input")) return;
-  const line = state.lines.find((l) => l.lineId === e.target.closest(".order-line").dataset.line);
-  if (!line) return;
-  setLineQuantity(line, e.target.value);
-}
-
-// 注文済みの数量を変える（0 で取り消し）
-function setLineQuantity(line, raw) {
-  const result = checkInteger(raw, "数量", 0, 99);
-  if (!result.ok) {
-    showMessage(result.message, true);
-    renderOrderList();
-    return;
-  }
-  if (result.value === 0) {
-    state.lines = state.lines.filter((l) => l !== line);
-    showMessage(`${line.menuName} を取り消しました`, false);
-  } else {
-    line.quantity = result.value;
-  }
-  saveCurrent();
-  renderOrderList();
-}
-
 // ===== 会計 =====
 function calcBill() {
-  const sumOf = (filter) =>
-    state.lines.filter(filter).reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
-
   const tabehodai = PRICE.tabehodai * state.customers.length;
-  const nomihodai = PRICE.nomihodai * state.customers.filter((c) => c.nomihodai).length;
-  const ippin = sumOf((l) => l.category === "ippin");
-  const dessert = sumOf((l) => l.category === "dessert");
-  const tanpinDrink = sumOf((l) => DRINK_CATEGORIES.includes(l.category) && l.plan === "単品");
+  const drinkbar = PRICE.drinkbar * drinkbarCount();
+  const tanpinDrink = state.lines
+    .filter((l) => l.plan === PLAN_TANPIN)
+    .reduce((sum, l) => sum + l.unitPrice * l.quantity, 0);
 
   return {
     tabehodai: tabehodai,
-    nomihodai: nomihodai,
-    ippin: ippin,
-    dessert: dessert,
+    drinkbar: drinkbar,
     tanpinDrink: tanpinDrink,
-    total: tabehodai + nomihodai + ippin + dessert + tanpinDrink,
+    total: tabehodai + drinkbar + tanpinDrink,
   };
 }
 
 // ===== ③ 会計確認画面 =====
 function enterConfirmScreen() {
   const bill = calcBill();
-  const people = state.customers.length;
-  const nomihodaiPeople = state.customers.filter((c) => c.nomihodai).length;
   const rows = [
-    ["食べ放題", `${yen(PRICE.tabehodai)} × ${people}人`, bill.tabehodai],
-    ["飲み放題", `${yen(PRICE.nomihodai)} × ${nomihodaiPeople}人`, bill.nomihodai],
-    ["一品料理", "", bill.ippin],
-    ["デザート", "", bill.dessert],
+    ["食べ放題", `${yen(PRICE.tabehodai)} × ${state.customers.length}人`, bill.tabehodai],
+    ["ドリンクバー", `${yen(PRICE.drinkbar)} × ${drinkbarCount()}人`, bill.drinkbar],
     ["単品ドリンク", "", bill.tanpinDrink],
   ];
   $("bill-body").innerHTML = rows
@@ -614,13 +764,13 @@ function enterConfirmScreen() {
     )
     .join("");
   $("bill-total").textContent = yen(bill.total);
+  $("bill-cart-note").hidden = state.cart.length === 0;
   showScreen("confirm");
 }
 
 // ===== ④ 会計確定 =====
 function checkout() {
   const bill = calcBill();
-  const confirmedAt = new Date().toISOString();
   const toItem = (l) => ({
     menuId: l.menuId,
     menuName: l.menuName,
@@ -635,12 +785,10 @@ function checkout() {
     peopleCount: state.peopleCount,
     customers: state.customers,
     allergies: state.allergies,
-    items: state.lines.filter((l) => !l.customerId).map(toItem),
-    drinkItems: state.lines
-      .filter((l) => l.customerId)
-      .map((l) => Object.assign({ customerId: l.customerId, plan: l.plan }, toItem(l))),
-    staffCalls: state.staffCalls || [],
-    bill: Object.assign({}, bill, { confirmedAt: confirmedAt }),
+    items: state.lines.filter((l) => !l.plan).map(toItem),
+    drinkItems: state.lines.filter((l) => l.plan).map((l) => Object.assign(toItem(l), { plan: l.plan })),
+    staffCalls: state.staffCalls,
+    bill: Object.assign({}, bill, { confirmedAt: new Date().toISOString() }),
     status: "終了",
   };
 
@@ -652,6 +800,7 @@ function checkout() {
     return;
   }
   removeKey(STORAGE_CURRENT);
+  stopClock();
   state = null;
 
   $("complete-total").textContent = yen(bill.total);
@@ -671,12 +820,13 @@ function init() {
   $("checkout-btn").addEventListener("click", checkout);
   $("new-order-btn").addEventListener("click", startNewOrder);
 
-  // 会計前の注文が残っていれば、注文画面から再開する
+  // 会計前の注文が残っていれば、注文画面から再開する（古い形のデータは使わない）
   const saved = loadJSON(STORAGE_CURRENT, null);
-  if (saved && saved.status === "注文中" && Array.isArray(saved.customers) && saved.customers.length > 0) {
+  if (saved && saved.version === DATA_VERSION && saved.status === "注文中" && Array.isArray(saved.customers)) {
     state = saved;
     enterOrderScreen();
   } else {
+    removeKey(STORAGE_CURRENT);
     showScreen("reception");
   }
 }
