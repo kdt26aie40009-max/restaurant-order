@@ -5,6 +5,7 @@ const STORAGE_CURRENT = "jiru_current_order"; // 会計前の注文
 const STORAGE_ORDERS = "jiru_orders"; // 会計確定済みの注文の一覧
 const DATA_VERSION = 2; // 会計前の注文データの形のバージョン
 const LAST_ORDER_MINUTES = 90; // 受付からラストオーダーまでの分数（動作確認のときは 1 などに変えて試せる）
+const RETURN_SECONDS = 60; // 会計完了画面から受付画面に戻るまでの秒数
 const DRINK_CATEGORIES = ["soft", "alcohol"];
 const ADULT_AGE = 20;
 const PLAN_DRINKBAR = "ドリンクバー";
@@ -16,6 +17,7 @@ let currentCategory = CATEGORIES[0].id;
 let messageTimer = null;
 let clockTimer = null;
 let lastOrderPassedShown = null; // 画面に反映済みのラストオーダー状態
+let returnTimer = null;
 
 // ===== 便利な関数 =====
 function $(id) {
@@ -805,6 +807,24 @@ function checkout() {
 
   $("complete-total").textContent = yen(bill.total);
   showScreen("complete");
+  startReturnCountdown();
+}
+
+// 会計完了画面を表示してから RETURN_SECONDS 秒後に、受付画面に戻る
+function startReturnCountdown() {
+  clearInterval(returnTimer);
+  const returnAt = Date.now() + RETURN_SECONDS * 1000;
+  const update = () => {
+    const sec = Math.max(0, Math.ceil((returnAt - Date.now()) / 1000));
+    $("return-countdown").textContent = `${sec}秒後に最初の画面に戻ります`;
+    if (sec === 0) {
+      clearInterval(returnTimer);
+      returnTimer = null;
+      startNewOrder();
+    }
+  };
+  update();
+  returnTimer = setInterval(update, 1000);
 }
 
 function startNewOrder() {
@@ -818,7 +838,6 @@ function init() {
   initOrderScreen();
   $("back-btn").addEventListener("click", () => showScreen("order"));
   $("checkout-btn").addEventListener("click", checkout);
-  $("new-order-btn").addEventListener("click", startNewOrder);
 
   // 会計前の注文が残っていれば、注文画面から再開する（古い形のデータは使わない）
   const saved = loadJSON(STORAGE_CURRENT, null);

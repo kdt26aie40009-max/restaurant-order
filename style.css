@@ -663,8 +663,13 @@ select:focus {
   font-weight: bold;
 }
 
-.complete .btn-large {
-  margin-top: 20px;
+.return-countdown {
+  margin: 20px 0 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--main-light);
+  color: var(--main);
+  font-weight: bold;
 }
 
 .cart-bar {
