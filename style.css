@@ -1,0 +1,672 @@
+/* ジルアーナマチャラ亭 ― 大衆居酒屋 × 鶏料理 */
+
+:root {
+  --main: #8b1e1e;        /* えんじ */
+  --main-dark: #6b1414;
+  --main-light: #f6e3d8;
+  --cream: #fbf5e6;       /* 生成り */
+  --paper: #fffdf7;
+  --text: #3a2418;        /* 濃い茶 */
+  --text-sub: #7a5e4d;
+  --line: #e2d3b8;
+  --gold: #c8962e;
+  --free: #2f6b3a;
+  --radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+body {
+  margin: 0;
+  background: var(--cream);
+  color: var(--text);
+  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+.note {
+  margin: 4px 0;
+  color: var(--text-sub);
+  font-size: 0.9rem;
+}
+
+/* ===== お知らせ ===== */
+.message {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  max-width: calc(100% - 32px);
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  background: var(--text);
+  color: #fff;
+  font-weight: bold;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.message.is-error {
+  background: #b3261e;
+}
+
+/* ===== ボタン ===== */
+.btn {
+  border: none;
+  border-radius: var(--radius);
+  padding: 10px 18px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.btn-main {
+  background: var(--main);
+  color: #fff;
+}
+
+.btn-main:hover {
+  background: var(--main-dark);
+}
+
+.btn-sub {
+  background: var(--paper);
+  color: var(--main);
+  border: 2px solid var(--main);
+}
+
+.btn-large {
+  display: block;
+  width: 100%;
+  padding: 16px;
+  font-size: 1.15rem;
+}
+
+/* ===== 店名（のれん風） ===== */
+.store-header {
+  background: var(--main);
+  color: #fff;
+  text-align: center;
+  padding: 28px 16px 22px;
+  border-bottom: 6px solid var(--gold);
+}
+
+.store-sub {
+  margin: 0;
+  letter-spacing: 0.2em;
+  font-size: 0.9rem;
+}
+
+.store-name {
+  margin: 4px 0;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-size: clamp(1.8rem, 6vw, 2.6rem);
+  letter-spacing: 0.1em;
+}
+
+.store-plan {
+  display: inline-block;
+  margin: 8px 0 0;
+  padding: 4px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  border-radius: 999px;
+  font-size: 0.9rem;
+}
+
+.order-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--main);
+  border-bottom: 4px solid var(--gold);
+}
+
+.order-header .btn-main {
+  background: var(--gold);
+  color: var(--text);
+}
+
+.header-buttons {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.header-buttons .btn {
+  white-space: nowrap;
+}
+
+.btn-call {
+  background: var(--paper);
+  color: var(--main);
+}
+
+.btn-call:hover {
+  background: var(--main-light);
+}
+
+.store-name-small {
+  margin: 0;
+  color: #fff;
+  font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+  font-size: 1.3rem;
+  letter-spacing: 0.08em;
+}
+
+/* ===== パネル ===== */
+.panel {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.panel-title {
+  margin: 0 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--main);
+  color: var(--main);
+  font-size: 1.3rem;
+}
+
+/* ===== ① 受付 ===== */
+.reception,
+.bill,
+.complete {
+  max-width: 720px;
+  margin: 24px auto;
+  margin-inline: max(16px, calc((100% - 720px) / 2));
+}
+
+.field {
+  margin-bottom: 20px;
+}
+
+.field > label,
+.field-label {
+  display: block;
+  margin: 0 0 6px;
+  font-weight: bold;
+}
+
+.people-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+input[type="text"],
+select {
+  padding: 10px 12px;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+input[type="text"]:focus,
+select:focus {
+  outline: none;
+  border-color: var(--main);
+}
+
+#people-count {
+  width: 120px;
+  font-size: 1.2rem;
+}
+
+.field-error {
+  margin: 6px 0 0;
+  color: #b3261e;
+  font-weight: bold;
+}
+
+.guest-rows {
+  display: grid;
+  gap: 10px;
+}
+
+.guest-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--cream);
+}
+
+.guest-no {
+  min-width: 3.5em;
+  color: var(--main);
+  font-weight: bold;
+}
+
+.guest-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.guest-age {
+  width: 80px;
+}
+
+.plan-note {
+  color: var(--text-sub);
+  font-size: 0.85rem;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.check input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--main);
+}
+
+.allergy-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.allergy-list .check {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+}
+
+.error-list {
+  margin: 0 0 16px;
+  padding: 12px 12px 12px 32px;
+  border: 2px solid #b3261e;
+  border-radius: 8px;
+  background: #fdeceb;
+  color: #b3261e;
+  font-weight: bold;
+}
+
+/* ===== ② 注文 ===== */
+.order-info {
+  margin: 0;
+  padding: 8px 16px;
+  background: var(--main-light);
+  font-size: 0.9rem;
+}
+
+.order-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 16px;
+  padding: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.category-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  margin-bottom: 12px;
+  border-bottom: 3px solid var(--main);
+}
+
+.tab {
+  flex: 0 0 auto;
+  padding: 10px 16px;
+  border: 2px solid var(--main);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: var(--paper);
+  color: var(--main);
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.tab.is-active {
+  background: var(--main);
+  color: #fff;
+}
+
+.menu-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.menu-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-top: 5px solid var(--main);
+  border-radius: var(--radius);
+  background: var(--paper);
+}
+
+.menu-name {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: bold;
+}
+
+.menu-price {
+  margin: 0;
+  color: var(--main);
+  font-size: 1.1rem;
+  font-weight: bold;
+}
+
+.menu-allergy {
+  margin: 0;
+  color: var(--text-sub);
+  font-size: 0.8rem;
+}
+
+.who-select {
+  width: 100%;
+}
+
+.qty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.qty-btn {
+  width: 44px;
+  height: 44px;
+  border: 2px solid var(--main);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--main);
+  font-size: 1.3rem;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.qty-input {
+  width: 64px;
+  text-align: center;
+}
+
+.qty-small .qty-btn {
+  width: 36px;
+  height: 36px;
+  font-size: 1.1rem;
+}
+
+.qty-small .qty-input {
+  width: 52px;
+  padding: 6px;
+}
+
+.order-btn {
+  margin-top: auto;
+  padding: 12px;
+  font-size: 1.05rem;
+}
+
+/* サイド */
+.side-area {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.side-panel {
+  padding: 16px;
+}
+
+.side-title {
+  margin: 0 0 10px;
+  color: var(--main);
+  font-size: 1.1rem;
+}
+
+.recommend-select {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+}
+
+.recommend-list,
+.ranking-list,
+.order-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recommend-list li {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.recommend-list .recommend-reason {
+  color: var(--text-sub);
+  font-size: 0.85rem;
+}
+
+.recommend-name {
+  font-weight: bold;
+}
+
+.recommend-cat {
+  color: var(--text-sub);
+  font-size: 0.8rem;
+}
+
+.ranking-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.rank-no {
+  min-width: 2.5em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: var(--main-light);
+  text-align: center;
+  font-weight: bold;
+}
+
+.rank-1 .rank-no {
+  background: var(--gold);
+  color: #fff;
+}
+
+.rank-name {
+  flex: 1;
+  font-weight: bold;
+}
+
+.rank-count {
+  color: var(--main);
+  font-weight: bold;
+}
+
+.order-line {
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--line);
+}
+
+.line-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.line-name {
+  font-weight: bold;
+}
+
+.line-tag {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--main-light);
+  color: var(--main);
+  font-size: 0.8rem;
+}
+
+.line-tag.is-free {
+  background: #e3f0e3;
+  color: var(--free);
+}
+
+.line-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+
+.line-price {
+  font-weight: bold;
+}
+
+.order-total {
+  margin: 10px 0 0;
+  text-align: right;
+  font-weight: bold;
+}
+
+/* ===== ③ 会計確認 ===== */
+.bill-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 20px;
+}
+
+.bill-table th,
+.bill-table td {
+  padding: 12px 4px;
+  border-bottom: 1px dashed var(--line);
+}
+
+.bill-table th {
+  text-align: left;
+}
+
+.bill-table td {
+  text-align: right;
+  font-size: 1.1rem;
+}
+
+.bill-detail {
+  display: block;
+  color: var(--text-sub);
+  font-size: 0.85rem;
+  font-weight: normal;
+}
+
+.bill-total th,
+.bill-total td {
+  border-top: 3px double var(--main);
+  border-bottom: none;
+  color: var(--main);
+  font-size: 1.4rem;
+  font-weight: bold;
+}
+
+.bill-buttons {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 12px;
+}
+
+/* ===== ④ 会計完了 ===== */
+.complete {
+  text-align: center;
+}
+
+.complete-label {
+  margin: 0;
+  color: var(--text-sub);
+}
+
+.complete-total {
+  margin: 0 0 12px;
+  color: var(--main);
+  font-size: 2.4rem;
+  font-weight: bold;
+}
+
+.complete-thanks {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: bold;
+}
+
+.complete .btn-large {
+  margin-top: 20px;
+}
+
+/* ===== スマートフォン ===== */
+@media (max-width: 820px) {
+  .order-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .panel {
+    padding: 16px;
+  }
+
+  .menu-list {
+    grid-template-columns: 1fr;
+  }
+
+  .bill-buttons {
+    grid-template-columns: 1fr;
+  }
+
+  /* 店名とボタンを 2 段に分ける */
+  .order-header {
+    flex-wrap: wrap;
+  }
+
+  .header-buttons {
+    width: 100%;
+  }
+
+  .header-buttons .btn {
+    flex: 1;
+  }
+}

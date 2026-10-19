@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ジルアーナマチャラ亭 ご注文</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 入力エラーや注文完了のお知らせ -->
+  <div id="message" class="message" role="alert" hidden></div>
+
+  <!-- ① 受付画面 -->
+  <section id="screen-reception" class="screen">
+    <header class="store-header">
+      <p class="store-sub">鶏肉食べ放題の大衆酒場</p>
+      <h1 class="store-name">ジルアーナマチャラ亭</h1>
+      <p class="store-plan">食べ放題 90分 お一人様 2,500円 ／ 飲み放題 +1,000円</p>
+    </header>
+
+    <main class="panel reception">
+      <h2 class="panel-title">ご来店受付</h2>
+
+      <div class="field">
+        <label for="people-count">人数（1〜20人）</label>
+        <div class="people-input">
+          <input id="people-count" type="text" inputmode="numeric" placeholder="例：3" autocomplete="off">
+          <span>人</span>
+        </div>
+        <p id="people-error" class="field-error" hidden></p>
+      </div>
+
+      <div class="field">
+        <p class="field-label">お一人ずつ入力してください</p>
+        <div id="guest-rows" class="guest-rows">
+          <p class="note">人数を入力すると、入力欄が表示されます。</p>
+        </div>
+      </div>
+
+      <div class="field">
+        <p class="field-label">アレルギー（卓全体）</p>
+        <p class="note">チェックしたアレルギーを含むメニューは表示されません。</p>
+        <div id="allergy-list" class="allergy-list"></div>
+      </div>
+
+      <ul id="reception-errors" class="error-list" hidden></ul>
+
+      <button id="start-btn" class="btn btn-main btn-large" type="button">注文をはじめる</button>
+    </main>
+  </section>
+
+  <!-- ② 注文画面 -->
+  <section id="screen-order" class="screen" hidden>
+    <header class="order-header">
+      <h1 class="store-name-small">ジルアーナマチャラ亭</h1>
+      <div class="header-buttons">
+        <button id="call-staff-btn" class="btn btn-call" type="button">店員呼び出し</button>
+        <button id="to-confirm-btn" class="btn btn-main" type="button">会計へ</button>
+      </div>
+    </header>
+    <p id="order-info" class="order-info"></p>
+
+    <div class="order-layout">
+      <main class="menu-area">
+        <div id="category-tabs" class="category-tabs" role="tablist"></div>
+        <div id="menu-list" class="menu-list"></div>
+      </main>
+
+      <aside class="side-area">
+        <section class="panel side-panel">
+          <h2 class="side-title">★ おすすめ</h2>
+          <label class="recommend-select">
+            <span>どなたのおすすめ？</span>
+            <select id="recommend-person"></select>
+          </label>
+          <ul id="recommend-list" class="recommend-list"></ul>
+        </section>
+
+        <section class="panel side-panel">
+          <h2 class="side-title">人気ランキング（鶏肉）</h2>
+          <ol id="ranking-list" class="ranking-list"></ol>
+        </section>
+
+        <section class="panel side-panel">
+          <h2 class="side-title">注文済み</h2>
+          <p class="note">数量を 0 にすると取り消しになります。</p>
+          <ul id="order-list" class="order-list"></ul>
+          <p id="order-total" class="order-total"></p>
+        </section>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ③ 会計確認画面 -->
+  <section id="screen-confirm" class="screen" hidden>
+    <header class="order-header">
+      <h1 class="store-name-small">ジルアーナマチャラ亭</h1>
+    </header>
+    <main class="panel bill">
+      <h2 class="panel-title">お会計確認</h2>
+      <table class="bill-table">
+        <tbody id="bill-body"></tbody>
+        <tfoot>
+          <tr class="bill-total">
+            <th>合計</th>
+            <td id="bill-total"></td>
+          </tr>
+        </tfoot>
+      </table>
+      <div class="bill-buttons">
+        <button id="back-btn" class="btn btn-sub btn-large" type="button">戻る</button>
+        <button id="checkout-btn" class="btn btn-main btn-large" type="button">会計を確定</button>
+      </div>
+    </main>
+  </section>
+
+  <!-- ④ 会計完了画面 -->
+  <section id="screen-complete" class="screen" hidden>
+    <header class="store-header">
+      <h1 class="store-name">ジルアーナマチャラ亭</h1>
+    </header>
+    <main class="panel complete">
+      <p class="complete-label">お会計</p>
+      <p id="complete-total" class="complete-total"></p>
+      <p class="complete-thanks">ご利用ありがとうございました！</p>
+      <p class="note">またのご来店をお待ちしております。</p>
+      <button id="new-order-btn" class="btn btn-main btn-large" type="button">新しい注文をはじめる</button>
+    </main>
+  </section>
+
+  <script src="menu.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
