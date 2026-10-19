@@ -224,4 +224,4 @@ localStorage には次の 2 つのキーで保存します。開発者ツール�
 
 ## 作成者
 
-（名前）（GitHub：kdt26aie40009-max）
+水越亮輔（GitHub：kdt26aie40009-max）
